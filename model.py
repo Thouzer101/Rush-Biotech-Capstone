@@ -18,7 +18,6 @@ class PositionalEncoding(nn.Module):
     '''
     def __init__(self, embSize, dropout, device, maxLen=1000):
         super().__init__()
-        maxLen = 1000
         denominator = torch.exp(torch.arange(0, embSize, 2) * torch.log(torch.tensor(10000)) / embSize)
         pos = torch.arange(0, maxLen).reshape(maxLen, 1)
 
@@ -26,11 +25,6 @@ class PositionalEncoding(nn.Module):
         pe[:, 0::2] = torch.sin(pos / denominator)
         pe[:, 1::2] = torch.cos(pos / denominator)
         pe.requires_grad = False
-
-        import matplotlib.pyplot as plt
-        plt.plot(pe[:500, :])
-        plt.show()
-        exit(0)
 
         self.pe = pe.unsqueeze(0).to(device)
         self.dropout = nn.Dropout(dropout)
@@ -155,7 +149,7 @@ class DecoderLayer(nn.Module):
 
         self.dropout = nn.Dropout(dropout)
 
-    def forward(self, encOut, tarEmb, tarMask):
+    def forward(self, encOut, tarEmb, tarMask=None):
         #first sublayer masked self attention
         out, maskedAttention = self.maskedSelfAttention(tarEmb, tarEmb, tarEmb, tarMask)
         #residual connection and layer norm
@@ -180,10 +174,10 @@ class Encoder(nn.Module):
         self.embSize = embSize
         self.encoderLayers = nn.ModuleList([EncoderLayer(embSize, nHeads, pwffDim, dropout)
                                             for n in range(nLayers)])
-    def forward(self, emb):
+    def forward(self, emb, srcMask):
 
         for layer in self.encoderLayers:
-            emb, attention = layer(emb)
+            emb, attention = layer(emb, srcMask)
 
         return emb
 
@@ -207,9 +201,9 @@ class EncoderLayer(nn.Module):
 
         self.dropout = nn.Dropout(dropout)
     
-    def forward(self, emb):
+    def forward(self, emb, srcMask=None):
         #first sublayer
-        out, attention = self.selfAttention(emb, emb, emb)
+        out, attention = self.selfAttention(emb, emb, emb, srcMask)
         #residual followed by layerNorm
         emb = self.attentionLayerNorm(emb + self.dropout(out))
 
@@ -239,16 +233,16 @@ class Transformer(nn.Module):
         self.fcOut = nn.Linear(embSize, tarVocabSize)
 
 
-    def forward(self, src, tar, tarMask):
+    def forward(self, src, tar, srcMask=None, tarMask=None):
 
-        encOut = self.encode(src)
+        encOut = self.encode(src, srcMask)
         decOut, attention = self.decode(encOut, tar, tarMask)
 
         return self.fcOut(decOut)
 
-    def encode(self, src):
+    def encode(self, src, srcMask):
         srcEmb = self.pe(self.srcEmb(src))
-        encOut = self.encoder(srcEmb)
+        encOut = self.encoder(srcEmb, srcMask)
 
         return encOut
 
@@ -258,24 +252,27 @@ class Transformer(nn.Module):
 
         return decOut, attention
 
+    def createSrcMask(self, src, padIdx):
+        mask = torch.ones(src.shape).long()
+        mask[src == padIdx] = 0
+        mask = mask.unsqueeze(1).unsqueeze(1)
 
-def createForwardMask(seqLen):
-    '''
-    Prevents model from attending to tensors its supposed to predict
-    Remember
-    softmax(z) = e^z / sum(e^z), so if z is a large negative number
-    then e^z is really close to zero
-    '''
-    mask = torch.tril(torch.ones((seqLen, seqLen)))
+        return mask
 
-    return mask
+    
+    def createTarMask(self, tar, padIdx):
+        padMask = torch.ones(tar.shape).long()
+        padMask[tar == padIdx] = 0
+        padMask = padMask.unsqueeze(1).unsqueeze(1)
 
-def createPaddingMask(seq, padIdx):
+        seqLen = tar.shape[1]
+        seqMask = torch.tril(torch.ones((seqLen, seqLen))).long()
+        seqMask = seqMask.unsqueeze(0).unsqueeze(0)
 
-    padMask = torch.ones(seq.shape)
-    padMask[seq == padIdx] = 0
+        tarMask = padMask & seqMask
 
-    return padMask
+        return tarMask
+
 
 def main():
 
@@ -289,13 +286,14 @@ def main():
     srcSeqLen = 10
     tarSeqLen = 7
     device = 'cuda'
+    padIdx = 0
 
     src = torch.randint(0, srcVocabSize, size=(batchSize, srcSeqLen))
     tar = torch.randint(0, tarVocabSize, size=(batchSize, tarSeqLen))
 
-    tarMask = createForwardMask(tarSeqLen)
+    src[:,-3:] = padIdx
+    tar[:,-2:] = padIdx
 
-    tarMask = tarMask.to(device)
     src = src.to(device)
     tar = tar.to(device)
 
@@ -304,8 +302,13 @@ def main():
 
     model = model.to(device)
 
-    pred = model(src, tar, tarMask)
+    srcMask = model.createSrcMask(src, padIdx).to(device)
+    tarMask = model.createTarMask(tar, padIdx).to(device)
+
+    pred = model(src, tar, srcMask, tarMask)
     print(pred.shape)
+    encOut = model.encode(src, srcMask)
+    pred = model.decode(encOut, tar, tarMask)
 
 if __name__ == '__main__':
     main()
