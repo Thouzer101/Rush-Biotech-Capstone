@@ -1,4 +1,6 @@
 *.bin
+*.csv
+*.txt
 papers/
 
 # Byte-compiled / optimized / DLL files

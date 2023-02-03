@@ -37,6 +37,14 @@ def main():
     data = pickle.load(open('tmp.bin', 'rb'))
     print(len(data))
 
+    #get min, max, and mean for stay at hospital
+    for hadmId in data.keys():
+        item = data[hadmId]
+        admitTime = item['admitTime']
+        dischargeTime = item['dischargeTime']
+        print('Admission ID:', hadmId)
+        print(type(admitTime), admitTime, type(dischargeTime), dischargeTime)
+
     return
 
 if __name__ == '__main__':

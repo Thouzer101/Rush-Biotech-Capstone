@@ -22,7 +22,7 @@ def main():
     #if memory bound
     #'''
 
-    columnIdx = 0
+    columnIdx = 6
     nRows = 0
     items = defaultdict(int)
     with open(csvPath, 'r') as f:
@@ -36,6 +36,9 @@ def main():
         print('Evaluating column:', columnId)
 
         for item in csvReader:
+            print(item)
+
+            return
             items[item[columnIdx]] += 1
             nRows += 1
     
@@ -48,6 +51,12 @@ def main():
 
     end = time.time()
     print('elapsed time:', end - start)
+    return
+
+    #store the elements
+    with open('data.txt', 'w') as f:
+        for item in items:
+            f.write(str(item[0]) + '\t' + str(item[1]) + '\n')
 
     return
     #'''        
