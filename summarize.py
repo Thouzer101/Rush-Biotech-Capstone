@@ -4,6 +4,7 @@ from collections import defaultdict
 import time
 import pandas as pd
 import numpy as np
+from tqdm import tqdm
 
 def sortDict(inputDict, sortFunc, reverse=True):
 
@@ -35,10 +36,9 @@ def main():
         columnId = rowHeaders[columnIdx]
         print('Evaluating column:', columnId)
 
-        for item in csvReader:
-            print(item)
+        for item in tqdm(csvReader):
+            #print(item)
 
-            return
             items[item[columnIdx]] += 1
             nRows += 1
     
