@@ -14,8 +14,8 @@ def sortDict(inputDict, sortFunc, reverse=True):
 
 def main():
 
-    csvPath = r"..\mimiciv\2.0\hosp\emar_detail.csv"
-    csvPath = r"..\mimiciv\2.0\icu\chartevents.csv"
+    csvPath = r"..\mimiciv\2.0\hosp\emar.csv"
+    #csvPath = r"..\mimiciv\2.0\icu\inputevents.csv"
 
     #'''
     start = time.time()
@@ -23,10 +23,10 @@ def main():
     #if memory bound
     #'''
 
-    columnIdx = 6
+    columnIdx = 0
     nRows = 0
     items = defaultdict(int)
-    with open(csvPath, 'r') as f:
+    with open(csvPath, 'r', encoding='utf-8') as f:
         csvReader = csv.reader(f)
 
         rowHeaders = next(csvReader)
@@ -38,10 +38,11 @@ def main():
 
         for item in tqdm(csvReader):
             #print(item)
+            #return
 
             items[item[columnIdx]] += 1
             nRows += 1
-    
+    print(item) 
     print("Total Rows:", nRows)
 
     print('Unique elements', len(items.keys()))
@@ -51,6 +52,7 @@ def main():
 
     end = time.time()
     print('elapsed time:', end - start)
+    
     return
 
     #store the elements
