@@ -3,6 +3,7 @@
 *.txt
 *.db
 *.xlsx
+*.pt
 papers/
 
 # Byte-compiled / optimized / DLL files

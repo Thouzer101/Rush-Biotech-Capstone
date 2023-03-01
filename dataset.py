@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from tqdm import tqdm
 
 import torch
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 
 def timestamp_to_secs(timeStamp):
     return datetime.strptime(timeStamp, '%Y-%m-%d %H:%M:%S').timestamp()
@@ -52,9 +52,10 @@ class MimicDataset(Dataset):
         categories = {}
         categories['<pad>'] = 0
         categories['<end>'] = 1
+        categories['<cls>'] = 2 #for classification
         with open(categoriesFile) as csvFile:
             csvReader = csv.reader(csvFile)
-            cnt = 2
+            cnt = 3
             for row in csvReader:
                 categories[row[0]] = cnt
                 cnt += 1
@@ -122,7 +123,7 @@ class MimicDataset(Dataset):
 
         events = []
         for row in rows:
-            event = {'chartTime': row[4], 'itemId': row[6], 
+            event = {'entryId': row[0], 'chartTime': row[4], 'itemId': row[6], 
                      'itemVal': row[7], 'itemUnit': row[9]}
             events.append(event)
 
@@ -152,7 +153,10 @@ class MimicDataset(Dataset):
                 itemVal = float(event['itemVal'])
                 mean = self.chartEventItemStats[itemId]['mean']
                 std = self.chartEventItemStats[itemId]['std']
-                eventVals.append((itemVal - mean) / std)
+                if std != 0:
+                    eventVals.append((itemVal - mean) / std)
+                else:
+                    eventVals.append(itemVal)
             else:
                 eventVals.append(0)
 
@@ -161,12 +165,8 @@ class MimicDataset(Dataset):
             normTime = max(normTime, 0)
             normTime = np.round(normTime).astype(int)
             eventTimes.append(normTime)
-        print(eventIdx)
-        print(eventVals)
-        print(eventTimes)
 
-        exit(0)
-            
+        return demoIdx, eventIdx, eventVals, eventTimes
 
 
 def main():
@@ -175,7 +175,18 @@ def main():
     validset = MimicDataset('valid') 
     print(len(trainset), len(validset))
 
-    trainset[0]
+    testset = validset
+    setIter = tqdm(range(len(testset)))
+    #setIter = range(len(testset))
+
+    maxLen = 0
+    for i in setIter:
+        item = testset[i]
+        demoIdx, eventIdx, eventVals, eventTimes = item
+        maxLen = max(len(eventIdx), maxLen)
+        
+
+    print('maximum length of events', maxLen)
 
     
 

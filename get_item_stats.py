@@ -7,14 +7,13 @@ from tqdm import tqdm
 import numpy as np
 
 def is_float(inStr):
-    if inStr.replace('.', '').isnumeric():
+    if inStr.replace('.', '').replace('-', '').isnumeric():
         return True
     else:
         return False
 
 def main():
 
-    
     items = {}
     #make a dict of all d_items.csv
     dataDir = r'E:\OneDrive - rush.edu\Research Capstone\mimiciv\2.0'
@@ -28,6 +27,7 @@ def main():
             itemId = row[0]
             paramType = row[6]
             items[itemId] = {'vals':[], 'paramType': paramType}
+
     
     #go through each event for valid hamdIds
     dbPath = 'mimic_iv.db'
@@ -44,8 +44,9 @@ def main():
         itemVal = row[7]
         paramType = items[itemId]['paramType']
 
-        if 'Numeric' in paramType and is_float(itemVal):
+        if 'Numeric' in paramType:
             items[itemId]['vals'].append(float(itemVal))
+
 
     for itemKey in tqdm(items.keys()):
         item = items[itemKey]
