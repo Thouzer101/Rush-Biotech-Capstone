@@ -13,6 +13,7 @@ def main():
         cnt = 0
         line = f.readline()
         while line:
+			#skip header in file
             if cnt < 34:
                 line = f.readline()
                 cnt += 1
@@ -29,6 +30,7 @@ def main():
         cnt = 0
         line = f.readline()
         while line:
+			#skip header in file
             if cnt < 34:
                 line = f.readline()
                 cnt += 1

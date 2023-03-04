@@ -14,8 +14,9 @@ def main():
     trainset = YelpDataset('train')
     validset = YelpDataset('valid')
 
-    trainloader = DataLoader(trainset, batch_size=batchSize, shuffle=True, collate_fn=collate_fn)
-    validloader = DataLoader(validset, batch_size=batchSize, shuffle=False, collate_fn=collate_fn)
+    nWorkers = 4
+    trainloader = DataLoader(trainset, batch_size=batchSize, shuffle=True, num_workers=nWorkers, collate_fn=collate_fn)
+    validloader = DataLoader(validset, batch_size=batchSize, shuffle=False, num_workers=nWorkers, collate_fn=collate_fn)
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     vocabSize = len(trainset.tokToIdx.keys())

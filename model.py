@@ -178,9 +178,11 @@ def main():
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     batchSize = 16
-    seqLen = 24 * 30 * 2 #hrs per day, number of days, events per hour
+    #hrs per day, number of days, events per hour
+    #1440
+    seqLen = 24 * 30 * 2 
     nLayers = 4
-    nCategories = 4130
+    nTokens = 2350
     embSize = 112
     peSize = 16
     dropout = 0.1

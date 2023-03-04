@@ -24,6 +24,8 @@ def build_table(conn, csvPath, tableName=None, primaryKey=None, fast=True, buffS
 
     if tableName is None:
         tableName = csvPath.split('\\')[-1].split('.')[0]
+
+    print('Building Table: %s'%tableName)
     
     with open(csvPath, 'r', encoding='utf-8') as csvFile:
         csvReader = csv.reader(csvFile)
@@ -66,15 +68,21 @@ def build_table(conn, csvPath, tableName=None, primaryKey=None, fast=True, buffS
 
 def main():
 
+    return
     dataDir = r'E:\OneDrive - rush.edu\Research Capstone\mimiciv\2.0'
     dbPath = 'mimic_iv.db'
-    '''
+    #'''
     if os.path.isfile(dbPath):
         os.remove(dbPath)
     #'''
-
+    
     #create database
     conn = sqlite3.connect(dbPath)
+    cursor = conn.cursor()
+
+    csvPath = os.path.join(dataDir, 'hosp', 'labevents.csv')
+    build_table(conn, csvPath)
+    cursor.execute("CREATE INDEX labeventsHadmIdx ON labevents(hadm_id)")
 
     csvPath = os.path.join(dataDir, 'hosp', 'poe.csv')
     build_table(conn, csvPath)
@@ -85,37 +93,28 @@ def main():
     csvPath = os.path.join(dataDir, 'hosp', 'emar.csv')
     build_table(conn, csvPath)
 
-    #make table for microbiologyevents
     csvPath = os.path.join(dataDir, 'hosp', 'microbiologyevents.csv')
     build_table(conn, csvPath)
 
-    #make table for omr
     csvPath = os.path.join(dataDir, 'hosp', 'omr.csv')
     build_table(conn, csvPath)
 
-    #make table for prcedures_icd
     csvPath = os.path.join(dataDir, 'hosp', 'procedures_icd.csv')
     build_table(conn, csvPath)
 
-    #make table for diagnoses_icd
     csvPath = os.path.join(dataDir, 'hosp', 'diagnoses_icd.csv')
     build_table(conn, csvPath)
+    cursor.execute("CREATE INDEX diagnosesHadmIdx ON diagnoses_icd(hadm_id)")
 
     csvPath = os.path.join(dataDir, 'hosp', 'patients.csv')
     build_table(conn, csvPath, primaryKey='subject_id')
 
-    return
-    #convert csv to table in database
-    
     csvPath = os.path.join(dataDir, 'hosp', 'admissions.csv')
-    build_table(conn, csvPath, primaryKey='hadm_id')
+    build_table(conn, csvPath, primaryKey='hadm_id') 
 
     csvPath = os.path.join(dataDir, 'icu', 'chartevents.csv')
     build_table(conn, csvPath)
-    cursor.execute("CREATE INDEX hadmIdx ON chartevents(hadm_id)")
-
-    csvPath = os.path.join(dataDir, 'hosp', 'patients.csv')
-    build_table(conn, csvPath, primaryKey='subject_id')
+    cursor.execute("CREATE INDEX chateventsHadmIdx ON chartevents(hadm_id)")
 
     conn.close()
 

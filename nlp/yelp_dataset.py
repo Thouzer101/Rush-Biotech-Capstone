@@ -121,7 +121,10 @@ def main():
     print(len(trainset), len(validset))
 
     batchSize = 32
-    trainloader = DataLoader(trainset, batch_size=batchSize, shuffle=True, collate_fn=collate_fn)
+    nWorkers = 4
+    trainloader = DataLoader(trainset, batch_size=batchSize, num_workers=nWorkers, shuffle=True, collate_fn=collate_fn)
+
+    #TODO, check that nWorkers 0 and 4 are the same data
 
     testIter = trainloader
     for item in testIter:
