@@ -61,12 +61,11 @@ def main():
 
     #convert to idx
     tokToIdx = {}
-    tokToIdx['<pad>'] = 0
-    tokToIdx['<end>'] = 1
-    tokToIdx['<cls>'] = 2
+    tokToIdx['<pad>'] = -1
+    tokToIdx['<cls>'] = 0
     with open('tokens.txt', 'r', encoding='utf-8') as txtFile:
         line = txtFile.readline()
-        cnt = 3
+        cnt = 1
         while line:
             jsonData = json.loads(line)
             key = list(jsonData.keys())[0]

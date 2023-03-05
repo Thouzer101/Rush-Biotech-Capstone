@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
 
+import numpy as np
+
 class PositionalEncoding(nn.Module):
     '''
     PE(pos, 2i)     = sin(pos/(10000^(2i/embSize)))
@@ -31,6 +33,11 @@ class PositionalEncoding(nn.Module):
         self.maxLen = maxLen
 
     def forward(self, emb):
+        #We do not want to add
+        #we want to be able to predict the position in the future
+        #CHECK
+        print('in pe forward')
+        exit(0)
         batchSize, seqLen = emb.shape[:2]
         pe = self.pe.unsqueeze(0)[:,:seqLen,:]
         pe = pe.repeat(batchSize, 1, 1).to(emb.device)
@@ -152,7 +159,6 @@ class Block(nn.Module):
     
     def forward(self, emb, mask=None):
         out, maskedAttention = self.maskedSelfAttention(emb, emb, emb, mask)
-        
         emb = self.maskedAttentionLayerNorm(emb + self.dropout(out))
 
         out = self.pwff(emb)
@@ -161,12 +167,14 @@ class Block(nn.Module):
         return emb
 
 class MimicModel(nn.Module):
-    def __init__(self, nLayers, embSize, nHeads=8, pwffDim=512, dropout=0.1):
+    def __init__(self, nLayers, embSize, 
+                 nHeads=8, pwffDim=512, dropout=0.1):
         super().__init__()
         self.nLayers = nLayers
         self.embSize = embSize
+
         self.blocks = nn.ModuleList([Block(embSize, nHeads, pwffDim, dropout)
-                                     for n in range(nLayers)])
+                                     for _ in range(nLayers)])
 
     def forward(self, emb, mask=None):
         for layer in self.blocks:
@@ -174,20 +182,56 @@ class MimicModel(nn.Module):
 
         return emb
 
+def createMask(vec, vecOffset, padIdx):
+    batchSize, seqLen = vec.shape
+    newVec = torch.ones(batchSize, seqLen + vecOffset)
+    newVec[:,vecOffset:] = vec
+
+    padMask = torch.ones(newVec.shape).long()
+    padMask[newVec == padIdx] = 0
+    padMask = padMask.unsqueeze(1).unsqueeze(1)
+
+    x = vec[0,:].numpy()
+    n = x.shape[0]
+    y = x[1:] != x[:-1] 
+    #np where(y) gives index where it is True
+    #append n - 1 to end of np.where(y)
+    i = np.append(np.where(y), n - 1) #torch version of where is nonzero()
+    z = np.diff(np.append(-1, i)) #run length
+    print(x)
+    print(i)
+    print(z)
+
+    return
+
 def main():
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     batchSize = 16
     #hrs per day, number of days, events per hour
     #1440
-    seqLen = 24 * 30 * 2 
+    seqLen = 24 * 30 * 2
+    seqLen = 100
+    demoLen = 5 #number of demographic parameters
+    eventsLen = seqLen - demoLen
     nLayers = 4
-    nTokens = 2350
+    nTokens = 3200
     embSize = 112
     peSize = 16
     dropout = 0.1
+    padIdx = -1
 
-    x = torch.randint(0, nCategories, size=(batchSize, seqLen)).to(device)
+    demoIdx = torch.randint(0, 5, (batchSize, demoLen))
+    eventsIdx = torch.randint(1, nTokens, (batchSize, eventsLen))
+    eventsTimes = torch.randint(0, 20, (batchSize, eventsLen))
+    eventsTimes, _ = eventsTimes.sort()
+    eventsVals = torch.randn(batchSize, eventsLen)
+
+    eventsTimes[:,-3:] = -1
+    createMask(eventsTimes, demoLen, padIdx)
+
+    return
+
     vals = torch.randn(batchSize, seqLen).to(device)
 
 
