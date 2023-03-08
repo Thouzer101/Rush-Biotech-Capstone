@@ -80,12 +80,17 @@ def main():
             tokInput = tokTen[:,:-1]
 
             mask = createMask(tokInput, padIdx).to(device)
-            
+
             pred = model(tokInput, mask)
+
+            print(pred.shape)
+            print(tokInput.shape)
             pred = pred.contiguous().view(-1, pred.shape[-1])
             
             tokTrue = tokTen[:,1:].contiguous().view(-1)
-            
+            print(pred.shape) 
+            print(tokTrue.shape)
+            return
             loss = lossFunction(pred, tokTrue)
 
             loss.backward()            

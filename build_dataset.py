@@ -59,24 +59,6 @@ def main():
         else:
             icdTitles[key]['code'].append(code)
 
-    #convert to idx
-    tokToIdx = {}
-    tokToIdx['<pad>'] = -1
-    tokToIdx['<cls>'] = 0
-    with open('tokens.txt', 'r', encoding='utf-8') as txtFile:
-        line = txtFile.readline()
-        cnt = 1
-        while line:
-            jsonData = json.loads(line)
-            key = list(jsonData.keys())[0]
-            tokToIdx[key] = cnt
-            line = txtFile.readline()
-            cnt += 1
-
-    idxToTok = {} 
-    for item in tokToIdx.items():
-        idxToTok[item[1]] = item[0]
-
     #get event paramType
     chartEventTypes = {}
     with open('../mimiciv/2.0/icu/d_items.csv', 'r') as csvFile:
@@ -122,7 +104,7 @@ def main():
             line = txtFile.readline()
 
     pickle.dump(chartEventStats, open('chartEventStats.bin', 'wb'))
-    return
+    #return
     #'''
 
     '''
@@ -161,7 +143,7 @@ def main():
             line = txtFile.readline()
 
     pickle.dump(labEventStats, open('labEventStats.bin', 'wb'))
-    return
+    #return
     #'''
 
     chartEventStats = pickle.load(open('chartEventStats.bin', 'rb'))
@@ -227,7 +209,6 @@ def main():
         age = 'age_' + row[2]
 
         demographics = [age, race, maritalStatus, gender]
-        demoIdx = [tokToIdx[demo] for demo in demographics]
 
         #get chartEvents
         srcCursor.execute("SELECT * FROM chartevents WHERE hadm_id=?", (hadmId,))
@@ -236,33 +217,31 @@ def main():
         #each event is composed of an index, value, and a time
         chartEvents = []
         for row in rows:
-            itemId = row[6]
-            itemVal = row[7]
+            eventId = row[6]
+            eventVal = row[7]
             chartTime = timeStampToSecs(row[4])
 
-            eventIdx = tokToIdx[itemId]
-
-            paramType = chartEventTypes[itemId]
+            paramType = chartEventTypes[eventId]
             if 'Numeric' in paramType:
-                itemVal = float(itemVal)
-                mean = eventStats[itemId]['mean']
-                std = eventStats[itemId]['std']
-                eventVal = (itemVal - mean) / std
+                eventVal = float(eventVal)
+                mean = eventStats[eventId]['mean']
+                std = eventStats[eventId]['std']
+                eventVal = (eventVal - mean) / std
                 eventVal = np.clip(eventVal, a_min=-3, a_max=3)
             else:
-                factors = eventStats[itemId]['factors']
+                factors = eventStats[eventId]['factors']
                 factorsLen = len(factors)
-                if factorsLen == 0 or len(itemVal) == 0:
+                if factorsLen == 0 or len(eventVal) == 0:
                     eventVal = -1.0
                 else:
-                    idx = factors[itemVal]
+                    idx = factors[eventVal]
                     eventVal = float(idx) / (factorsLen - 1 + epsilon)
 
             eventTime = secToHr(chartTime - startTime)
             eventTime = max(eventTime, 0)
             eventTime = int(np.round(eventTime))
             
-            event = {'eventIdx':eventIdx, 'eventVal':eventVal, 'eventTime':eventTime}
+            event = {'eventId':eventId, 'eventVal':eventVal, 'eventTime':eventTime}
             chartEvents.append(event)
 
 
@@ -272,35 +251,33 @@ def main():
 
         labEvents = []
         for row in rows:
-            itemId = row[5]
-            itemVal = row[8]
+            eventId = row[5]
+            eventVal = row[8]
             chartTime = timeStampToSecs(row[6])
 
-            eventIdx = tokToIdx[itemId]
-
-            if 'mean' in eventStats[itemId].keys():
-                if isFloat(itemVal):
-                    itemVal = float(itemVal)
-                    mean = eventStats[itemId]['mean']
-                    std = eventStats[itemId]['std']
-                    eventVal = (itemVal - mean) / std
+            if 'mean' in eventStats[eventId].keys():
+                if isFloat(eventVal):
+                    eventVal = float(eventVal)
+                    mean = eventStats[eventId]['mean']
+                    std = eventStats[eventId]['std']
+                    eventVal = (eventVal - mean) / std
                     eventVal = np.clip(eventVal, a_min=-3, a_max=3)
                 else:
                     eventVal = 0.0
             else:
-                factors = eventStats[itemId]['factors']
+                factors = eventStats[eventId]['factors']
                 factorsLen = len(factors)
-                if factorsLen == 0 or len(itemVal) == 0:
+                if factorsLen == 0 or len(eventVal) == 0:
                     eventVal = -1.0
                 else:
-                    idx = factors[itemVal]
+                    idx = factors[eventVal]
                     eventVal = float(idx) / (factorsLen - 1 + epsilon)
 
             eventTime = secToHr(chartTime - startTime)
             eventTime = max(eventTime, 0)
             eventTime = int(np.round(eventTime))
 
-            event = {'eventIdx':eventIdx, 'eventVal':eventVal, 'eventTime':eventTime}
+            event = {'eventId':eventId, 'eventVal':eventVal, 'eventTime':eventTime}
             labEvents.append(event)
 
         #combine chart and lab events
@@ -331,7 +308,7 @@ def main():
         #TODO emar??
         #TODO poe??
 
-        entry = {'died': died, 'diagnoses':diagnoses, 'demoIdx':demoIdx, 'events':events}
+        entry = {'died': died, 'diagnoses':diagnoses, 'demographics':demographics, 'events':events}
 
         entryStr = json.dumps(entry)
 

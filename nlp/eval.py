@@ -29,6 +29,10 @@ def main():
             mask = createMask(out, padIdx)
 
             pred = model(out, mask)
+
+            #randomly pick some of the highest ones
+            print(pred.shape)
+            exit(0)
             predTok = pred.argmax(2)[:,-1].view(1, 1).long()
 
             out = torch.cat([out, predTok], dim=1)

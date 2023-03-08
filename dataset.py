@@ -70,7 +70,7 @@ def isListNumeric(arr):
     '''
 
 class MimicDataset(Dataset):
-    def __init__(self, hadmIdsFile, seqLen=1024, groupSize=8,
+    def __init__(self, hadmIdsFile, seqLen=1024, maxHrs=24*60,
                  dbFile='dataset.db', tokenFile='tokens.txt'):
         
         if not('train' in hadmIdsFile or 'valid' in hadmIdsFile):
@@ -87,18 +87,19 @@ class MimicDataset(Dataset):
         self.hadmIds = hadmIds
 
         self.seqLen = seqLen
-        self.groupSize = groupSize
+        self.maxHrs = maxHrs
 
         conn = sqlite3.connect(dbFile) 
         cursor = conn.cursor()
         self.cursor = cursor
 
         tokToIdx = {}
-        tokToIdx['<pad>'] = -1
-        tokToIdx['<cls>'] = 0
+        tokToIdx['<pad>'] = 0
+        tokToIdx['<cls>'] = 1
+        tokToIdx['<end>'] = 2
         with open(tokenFile, 'r', encoding='utf-8') as txtFile:
             line = txtFile.readline()
-            cnt = 1
+            cnt = 3
             while line:
                 jsonData = json.loads(line)
                 key = list(jsonData.keys())[0]
@@ -122,102 +123,74 @@ class MimicDataset(Dataset):
         self.cursor.execute("SELECT * FROM data WHERE hadmId=?", (hadmId,))
         item = self.cursor.fetchall()[0]
         item = json.loads(item[1])
-
+        
+        #label for classification
         died = eval(item['died'])
         if died:
             died = torch.tensor([1]).float()
         else:
             died = torch.tensor([0]).float()
 
-        demoIdx = torch.tensor(item['demoIdx']).long()
+        #build token tensor, vals tensor, and time tensor
+        tokTen = [self.tokToIdx['<cls>']] + [self.tokToIdx[demo] for demo in item['demographics']]
+        valsTen = len(tokTen) * [0.0]
+        timesTen = len(tokTen) * [0]
 
         events = item['events']
-        allEvents = []
-        allEventTimes = []
-        group = []
-        i = 0
+        maxEvents = self.seqLen - len(tokTen) - 1
+        if len(events) > maxEvents:
+            events = np.random.choice(events, maxEvents, replace=False).tolist()
 
-        #for end token
-        increment = np.ceil(float(len(demoIdx) + len(died)) / self.groupSize) * self.groupSize
-        while i < len(events) - 1 and len(allEventTimes) < self.seqLen - increment:
-            #make a group of events for a given hr 
-            curHr = events[i]['eventTime']
-            nextHr = events[i+1]['eventTime']
+        #sort just in case
+        events.sort(key= lambda x: x['eventTime'])
+        
+        for event in events:
+            tokTen.append(self.tokToIdx[event['eventId']])
+            valsTen.append(event['eventVal'])
+            timesTen.append(event['eventTime'])
+            lastTime = event['eventTime']
 
-            if curHr == nextHr:
-                group.append(events[i])
-                i += 1
-            else:
-                group.append(events[i])
+        tokTen.append(self.tokToIdx['<end>'])
+        valsTen.append(0)
+        timesTen.append(lastTime)
 
-                for groupSize in range(self.groupSize):
-                    allEventTimes.append(curHr)
+        tokTen = torch.tensor(tokTen).long()
+        valsTen = torch.tensor(valsTen).float()
+        timesTen = torch.tensor(timesTen).long()
 
-                if len(group) < self.groupSize + 1:
-                    while len(group) < self.groupSize:
-                        group.append({'eventIdx':-1, 'eventVal':0.0})
-                    allEvents.append(group)
-                else:
-                    group = np.random.choice(group, self.groupSize, replace=False).tolist()
-                    allEvents.append(group)
+        timesTen = torch.clip(timesTen, min=0, max=self.maxHrs - 1)
 
-                group = []
-                i += 1
-
-        eventTimes = torch.tensor(allEventTimes).long()
-        #idx, val, and time
-        eventIndices = []
-        eventVals = []
-        for group in allEvents:
-            for event in group:
-                eventIdx = event['eventIdx']
-                eventVal = event['eventVal']
-                eventIndices.append(eventIdx)
-                eventVals.append(eventVal)
-
-        eventIndices = torch.tensor(eventIndices).long()
-        eventVals = torch.tensor(eventVals).float()
-
-        events = {'eventIndices':eventIndices, 'eventVals':eventVals, 'eventTimes':eventTimes}
-
-        return {'died':died, 'demoIdx':demoIdx, 'events':events}
-
+        return {'died':died, 'tokTen':tokTen, 'valsTen':valsTen, 'timesTen':timesTen}
 
 
 def collate_fn(batchItem):
-    padIdx = -1
-    #find longest event
     batchSize = len(batchItem)
+
     maxLen = 0
     for item in batchItem:
-        itemLen = len(item['events']['eventVals'])
+        itemLen = len(item['tokTen'])
         maxLen = max(itemLen, maxLen)
 
-    batchDied = torch.zeros(batchSize).fill_(padIdx).long()
-
-    demoLen = batchItem[0]['demoIdx'].shape[0]
-    batchDemoIdx = torch.zeros(batchSize, demoLen).fill_(padIdx).long()
-
-    batchEventIndices = torch.zeros(batchSize, maxLen).fill_(padIdx).long()
-    batchEventVals = torch.zeros(batchSize, maxLen).float()
-    batchEventTimes = torch.zeros(batchSize, maxLen).fill_(padIdx).long()
+    batchDied = torch.zeros(batchSize).float()
+    batchTok = torch.zeros(batchSize, maxLen).long()
+    batchVals = torch.zeros(batchSize, maxLen).float()
+    batchTimes = torch.zeros(batchSize, maxLen).long()
 
     for i in range(batchSize):
-        batchDied[i] = batchItem[i]['died']
+        item = batchItem
 
-        batchDemoIdx[i,:] = batchItem[i]['demoIdx']
+        batchDied[i] = item[i]['died']
 
-        eventIndices = batchItem[i]['events']['eventIndices']
-        batchEventIndices[i,:eventIndices.shape[0]] = eventIndices
+        tokTen = item[i]['tokTen']
+        batchTok[i,:tokTen.shape[0]] = tokTen
 
-        eventVals = batchItem[i]['events']['eventVals']
-        batchEventVals[i,:eventVals.shape[0]] = eventVals
+        valsTen = item[i]['valsTen']
+        batchVals[i,:valsTen.shape[0]] = valsTen
 
-        eventTimes = batchItem[i]['events']['eventTimes']
-        batchEventTimes[i,:eventTimes.shape[0]] = eventTimes
+        timesTen = item[i]['timesTen']
+        batchTimes[i,:timesTen.shape[0]] = timesTen
 
-    events = {'eventIndices':batchEventIndices, 'eventVals':batchEventVals, 'eventTimes':batchEventTimes}
-    return {'died':batchDied, 'demoIdx':batchDemoIdx, 'events':events}
+    return {'died':batchDied, 'tokTen':batchTok, 'valsTen':batchVals, 'timesTen':batchTimes}
 
 
 def main():
@@ -232,16 +205,18 @@ def main():
     print(len(trainset), len(validset))
 
     testset = trainset
-    #nItems = tqdm(range(len(testset)))
-    nItems = range(0)
+
+    #nItems = range(len(testset))
+    nItems = tqdm(range(len(testset)))
+    #nItems = range(0)
     items = []
     for i in nItems:
         item = testset[i]
-        items.append(len(item['events']['eventVals']))
+        items.append(len(item['tokTen']))
 
     items = np.array(items)
-    #print(items.min(), items.max(), items.mean(), items.std())
-
+    print(items.min(), items.max(), items.mean(), items.std())
+    return
 
     nWorkers = 0 #HAS to be 0 since you cannot fork sqlite cursor into multiple workers
     batchSize = 32

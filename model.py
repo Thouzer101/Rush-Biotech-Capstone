@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 
 import numpy as np
+import matplotlib.pyplot as plt
 
 class PositionalEncoding(nn.Module):
     '''
@@ -18,7 +19,7 @@ class PositionalEncoding(nn.Module):
 
     dropout applied to sum of embedding and positional encoding
     '''
-    def __init__(self, embSize, maxLen=2048):
+    def __init__(self, embSize, maxLen, device):
         super().__init__()
         denominator = torch.exp(torch.arange(0, embSize, 2) * torch.log(torch.tensor(10000)) / embSize)
         pos = torch.arange(0, maxLen).reshape(maxLen, 1)
@@ -28,36 +29,19 @@ class PositionalEncoding(nn.Module):
         pe[:, 1::2] = torch.cos(pos / denominator)
         pe.requires_grad = False
 
-        self.pe = pe
+        self.pe = pe.unsqueeze(0)
         self.embSize = embSize
         self.maxLen = maxLen
+        self.device = device
 
-    def forward(self, emb):
+    def forward(self, tok):
         #We do not want to add
         #we want to be able to predict the position in the future
-        #CHECK
-        print('in pe forward')
-        exit(0)
-        batchSize, seqLen = emb.shape[:2]
-        pe = self.pe.unsqueeze(0)[:,:seqLen,:]
-        pe = pe.repeat(batchSize, 1, 1).to(emb.device)
-        return torch.cat((emb, pe), dim=2)
+        batchSize = tok.shape[0]
+        peTen = self.pe.repeat(batchSize, 1, 1).to(self.device)
+        out = peTen[torch.arange(batchSize).unsqueeze(1), tok]
 
-class InputEmbedding(nn.Module):
-    def __init__(self, nCategories, embSize, peSize, dropout):
-        super().__init__()
-        self.pe = PositionalEncoding(peSize)
-        self.em = nn.Embedding(nCategories, embSize - 1)
-
-    def forward(self, categoryIdx, vals):
-        emb = self.em(categoryIdx)
-        vals = vals.unsqueeze(-1)
-        emb = torch.cat((emb, vals), dim=-1)
-
-        emb = self.pe(emb)
-        print(emb.shape)
-        exit(0)
-    
+        return out
 
 class PositionWiseFeedfoward(nn.Module):
     def __init__(self, embSize, pwffDim):
@@ -164,84 +148,107 @@ class Block(nn.Module):
         out = self.pwff(emb)
         emb = self.pwffLayerNorm(emb + self.dropout(out))
 
-        return emb
+        return emb, maskedAttention
 
 class MimicModel(nn.Module):
-    def __init__(self, nLayers, embSize, 
-                 nHeads=8, pwffDim=512, dropout=0.1):
+    def __init__(self, nLayers, embSize, nTokens, peSize, device,
+                 maxHrs=2048, nCls=1, nHeads=8, pwffDim=512, dropout=0.1):
         super().__init__()
         self.nLayers = nLayers
         self.embSize = embSize
 
+        self.pe = PositionalEncoding(peSize, maxHrs, device)
+        self.em = nn.Embedding(nTokens, embSize - peSize - 1)
+
         self.blocks = nn.ModuleList([Block(embSize, nHeads, pwffDim, dropout)
                                      for _ in range(nLayers)])
 
-    def forward(self, emb, mask=None):
+        #for unsuperivsed pretraining 
+        #output indices 
+        self.fcIdx = nn.Linear(embSize, nTokens)
+        #output vals
+        self.fcVals = nn.Linear(embSize, 1)
+        #output times
+        self.fcTimes = nn.Linear(embSize, maxHrs)
+
+        #predict cls
+        self.fcCls = nn.Linear(embSize, nCls)
+
+    def forward(self, tokTen, valsTen, timesTen, mask=None):
+        tokEmb = self.em(tokTen)
+        timesEmb = self.pe(timesTen)
+
+        emb = torch.cat((tokEmb, valsTen.unsqueeze(-1), timesEmb), dim=-1)
+
         for layer in self.blocks:
-            emb = layer(emb, mask)
+            emb, attention = layer(emb, mask)
 
         return emb
+    
+    def unsupervised(self, emb):
+        #use the output of forward
+        idxOut = self.fcIdx(emb)
+        valsOut = self.fcVals(emb)
+        timesOut = self.fcTimes(emb)
 
-def createMask(vec, vecOffset, padIdx):
-    batchSize, seqLen = vec.shape
-    newVec = torch.ones(batchSize, seqLen + vecOffset)
-    newVec[:,vecOffset:] = vec
+        return idxOut, valsOut, timesOut
+    
+    def supervised(self, emb):
+        #use the output of forward
 
-    padMask = torch.ones(newVec.shape).long()
-    padMask[newVec == padIdx] = 0
+        #just first token?
+        emb = emb[:,0,:]
+        out = self.fcCls(emb)
+        return out
+
+def createMask(tokTen, padIdx):
+    padMask = torch.ones(tokTen.shape).long()
+    padMask[tokTen == padIdx] = 0
     padMask = padMask.unsqueeze(1).unsqueeze(1)
 
-    x = vec[0,:].numpy()
-    n = x.shape[0]
-    y = x[1:] != x[:-1] 
-    #np where(y) gives index where it is True
-    #append n - 1 to end of np.where(y)
-    i = np.append(np.where(y), n - 1) #torch version of where is nonzero()
-    z = np.diff(np.append(-1, i)) #run length
-    print(x)
-    print(i)
-    print(z)
+    seqLen = tokTen.shape[1]
+    seqMask = torch.tril(torch.ones((seqLen, seqLen))).long() 
+    seqMask = seqMask.unsqueeze(0).unsqueeze(0)
 
-    return
+    mask = padMask & seqMask
+
+    return mask
 
 def main():
 
     device = 'cuda' if torch.cuda.is_available() else 'cpu'
     batchSize = 16
-    #hrs per day, number of days, events per hour
-    #1440
-    seqLen = 24 * 30 * 2
-    seqLen = 100
-    demoLen = 5 #number of demographic parameters
-    eventsLen = seqLen - demoLen
+
+    seqLen = 1024
+    maxHrs = 24 * 60
+    
     nLayers = 4
     nTokens = 3200
-    embSize = 112
-    peSize = 16
+    embSize = 256
+    peSize = 64
     dropout = 0.1
-    padIdx = -1
+    padIdx = 0
+    clsIdx = 1
 
-    demoIdx = torch.randint(0, 5, (batchSize, demoLen))
-    eventsIdx = torch.randint(1, nTokens, (batchSize, eventsLen))
-    eventsTimes = torch.randint(0, 20, (batchSize, eventsLen))
-    eventsTimes, _ = eventsTimes.sort()
-    eventsVals = torch.randn(batchSize, eventsLen)
-
-    eventsTimes[:,-3:] = -1
-    createMask(eventsTimes, demoLen, padIdx)
-
-    return
-
-    vals = torch.randn(batchSize, seqLen).to(device)
+    tokTen = torch.randint(0, nTokens, (batchSize, seqLen)).long()
+    tokVals = torch.randn(batchSize, seqLen).float()
+    tokTimes = torch.randint(0, maxHrs, (batchSize, seqLen)).long()
 
 
-    createEmb = InputEmbedding(nCategories, embSize, peSize, dropout).to(device)
-    inputEmb = createEmb(x, vals)
+    mask = createMask(tokTen, padIdx).to(device)
 
-    model = MimicModel(nLayers, embSize + peSize).to(device)
+    model = MimicModel(nLayers, embSize, nTokens, peSize, device).to(device)
 
-    y = model(inputEmb)
-    print(y.shape)
+
+    #clsIdx, demoIdx, eventIndices, eventVals, eventTimes
+    tokTen = tokTen.to(device)
+    tokVals = tokVals.to(device)
+    tokTimes = tokTimes.to(device)
+    
+    out = model(tokTen, tokVals, tokTimes, mask)
+
+    model.unsupervised(out)
+    #model.supervised(rawOut)
     return
 
 if __name__ == '__main__':
