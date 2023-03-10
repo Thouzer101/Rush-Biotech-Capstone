@@ -137,6 +137,7 @@ class MimicDataset(Dataset):
         timesTen = len(tokTen) * [0]
 
         events = item['events']
+        allEvents = events
         maxEvents = self.seqLen - len(tokTen) - 1
         if len(events) > maxEvents:
             events = np.random.choice(events, maxEvents, replace=False).tolist()
@@ -160,7 +161,9 @@ class MimicDataset(Dataset):
 
         timesTen = torch.clip(timesTen, min=0, max=self.maxHrs - 1)
 
-        return {'died':died, 'tokTen':tokTen, 'valsTen':valsTen, 'timesTen':timesTen}
+        #TODO, remove all events later
+
+        return {'hadmId':hadmId, 'allEvents': allEvents, 'died':died, 'tokTen':tokTen, 'valsTen':valsTen, 'timesTen':timesTen}
 
 
 def collate_fn(batchItem):
