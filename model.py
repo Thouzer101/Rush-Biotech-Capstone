@@ -43,6 +43,18 @@ class PositionalEncoding(nn.Module):
 
         return out
 
+class NonContinuousPositionalEncoding(nn.Module):
+    def __init__(self, embSize, maxLen, device):
+        super().__init__()
+        self.pe = nn.Embedding(maxLen, embSize)
+        self.embSize = embSize
+        self.maxLen = maxLen
+        self.device = device
+    
+    def forward(self, tok):
+        out = self.pe(tok)
+        return out
+
 class PositionWiseFeedfoward(nn.Module):
     def __init__(self, embSize, pwffDim):
         super().__init__()
@@ -157,7 +169,8 @@ class MimicModel(nn.Module):
         self.nLayers = nLayers
         self.embSize = embSize
 
-        self.pe = PositionalEncoding(peSize, maxHrs, device)
+        #self.pe = PositionalEncoding(peSize, maxHrs, device)
+        self.pe = NonContinuousPositionalEncoding(peSize, maxHrs, device)
         self.em = nn.Embedding(nTokens, embSize - peSize - 1)
 
         self.blocks = nn.ModuleList([Block(embSize, nHeads, pwffDim, dropout)

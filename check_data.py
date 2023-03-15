@@ -2,12 +2,98 @@ import os
 import csv
 import pickle
 
+from collections import defaultdict
 import numpy as np
 from tqdm import tqdm
 
 from dataset import MimicDataset, isFloat, isListNumeric, epsilon
 
 def main():
+
+    dataDir = r'E:\OneDrive - rush.edu\Research Capstone\mimiciv\2.0'
+    tokLabels = {}
+    with open(os.path.join(dataDir, 'hosp', 'd_labitems.csv'), 'r') as csvFile:
+        csvReader = csv.reader(csvFile)
+        row = next(csvReader)
+        for row in csvReader:
+            token = row[0]
+            label = row[1]
+            tokLabels[token] = label
+
+    with open(os.path.join(dataDir, 'icu', 'd_items.csv'), 'r') as csvFile:
+        csvReader = csv.reader(csvFile)
+        row = next(csvReader)
+        for row in csvReader:
+            token = row[0]
+            label = row[1]
+            tokLabels[token] = label
+
+    #trainset = MimicDataset('subtrain.txt')
+    validset = MimicDataset('subvalid.txt')
+
+    data = defaultdict(dict)
+    death = 0
+    noDeath = 0
+    for item in tqdm(validset):
+
+        died = int(item['died'].item())
+        if died == 1:
+            death += 1
+        else:
+            noDeath += 1
+
+        tokTen = item['tokTen']
+        tmpSet = set()
+        for tok in tokTen:
+            token = validset.idxToTok[int(tok)]
+
+            tmpSet.add(token)
+
+        for tok in tmpSet:
+            if tok not in data[died].keys():
+                data[died][tok] = 1
+            else:
+                data[died][tok] += 1
+
+    #get all the tokens
+    tokens = {}
+    for key in data[1].keys():
+        ratio = data[1][key] / float(death)
+        tokens[key] = {'death': ratio}
+
+    for key in data[0].keys():
+        ratio = data[0][key] / float(noDeath)
+        if key not in tokens.keys():
+            tokens[key] = {'noDeath': ratio}
+        else:
+            tokens[key]['noDeath'] = ratio
+
+    csvFile = open('token_analysis.csv', 'w', newline='', encoding='utf-8')
+    csvWriter = csv.writer(csvFile)
+    csvWriter.writerow(['label', 'token', 'ratio in died', 'ratio in not died', 'difference'])
+    for key in tokens.keys():
+        item = tokens[key]
+
+        if 'death' not in item.keys():
+            deathRatio = 0
+        else:
+            deathRatio = item['death']
+        
+        if 'noDeath' not in item.keys():
+            noDeathRatio = 0
+        else:
+            noDeathRatio = item['noDeath']
+        
+        dif = np.abs(deathRatio - noDeathRatio)
+
+        if key in tokLabels.keys():
+            label = tokLabels[key]
+        else:
+            label = ''
+
+        csvWriter.writerow([label, key, deathRatio, noDeathRatio, dif])
+
+    return
 
     #go through all the data in train and validation
     trainHadmIds = []
@@ -143,9 +229,6 @@ def main():
                 csvWriter.writerow([subjectId, hadmId, eventId, eventVal, chartTime])
     #''' 
 
-    #make sure the original data can be found in the validset and trainset 
-    trainset = MimicDataset('subtrain.txt')
-    validset = MimicDataset('subvalid.txt')
 
 
 if __name__ == '__main__':

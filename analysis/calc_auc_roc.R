@@ -1,11 +1,12 @@
 library('pROC')
 
-pred = runif(100)
+setwd('E:\\OneDrive - rush.edu\\Research Capstone\\Rush-Biotech-Capstone\\analysis')
 
-true = (runif(100) > 0.5)
-true[true == TRUE] = 1
+csvData = read.csv('no_pretrain_results.csv')
 
-r = roc(true, pred)
+
+
+r = roc(csvData$Label, csvData$Prediction)
 print(r)
 
 plot.roc(r, legacy.axes=TRUE, 

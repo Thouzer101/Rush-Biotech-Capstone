@@ -70,7 +70,7 @@ def isListNumeric(arr):
     '''
 
 class MimicDataset(Dataset):
-    def __init__(self, hadmIdsFile, seqLen=1024, maxHrs=24*60,
+    def __init__(self, hadmIdsFile, seqLen=1024, maxHrs=24*60, timeLimit=None, 
                  dbFile='dataset.db', tokenFile='tokens.txt'):
         
         if not('train' in hadmIdsFile or 'valid' in hadmIdsFile):
@@ -88,6 +88,7 @@ class MimicDataset(Dataset):
 
         self.seqLen = seqLen
         self.maxHrs = maxHrs
+        self.timeLimit = timeLimit
 
         conn = sqlite3.connect(dbFile) 
         cursor = conn.cursor()
@@ -123,6 +124,8 @@ class MimicDataset(Dataset):
         self.cursor.execute("SELECT * FROM data WHERE hadmId=?", (hadmId,))
         item = self.cursor.fetchall()[0]
         item = json.loads(item[1])
+
+        deathTime = item['deathTime']
         
         #label for classification
         died = eval(item['died'])
@@ -136,15 +139,27 @@ class MimicDataset(Dataset):
         valsTen = len(tokTen) * [0.0]
         timesTen = len(tokTen) * [0]
 
+        
+
         events = item['events']
-        allEvents = events
+
+        if self.timeLimit is not None:
+        #remove events greater than 24 hrs
+            tmpEvents = []
+            for event in events:
+                if event['eventTime'] > self.timeLimit:
+                    continue
+                tmpEvents.append(event)
+            events = tmpEvents
+
         maxEvents = self.seqLen - len(tokTen) - 1
         if len(events) > maxEvents:
             events = np.random.choice(events, maxEvents, replace=False).tolist()
 
         #sort just in case
         events.sort(key= lambda x: x['eventTime'])
-        
+
+        lastTime = 0 
         for event in events:
             tokTen.append(self.tokToIdx[event['eventId']])
             valsTen.append(event['eventVal'])
@@ -161,9 +176,7 @@ class MimicDataset(Dataset):
 
         timesTen = torch.clip(timesTen, min=0, max=self.maxHrs - 1)
 
-        #TODO, remove all events later
-
-        return {'hadmId':hadmId, 'allEvents': allEvents, 'died':died, 'tokTen':tokTen, 'valsTen':valsTen, 'timesTen':timesTen}
+        return {'hadmId':hadmId, 'died':died, 'deathTime': deathTime, 'tokTen':tokTen, 'valsTen':valsTen, 'timesTen':timesTen}
 
 
 def collate_fn(batchItem):
@@ -215,7 +228,8 @@ def main():
     items = []
     for i in nItems:
         item = testset[i]
-        items.append(len(item['tokTen']))
+        #items.append(len(item['tokTen']))
+        items.append(item['deathTime'])
 
     items = np.array(items)
     print(items.min(), items.max(), items.mean(), items.std())

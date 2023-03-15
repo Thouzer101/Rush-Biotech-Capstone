@@ -27,14 +27,14 @@ def main():
             nn.init.xavier_uniform_(p)
 
     model = model.to(device)
-    model.load_state_dict(torch.load('fine_tune_model.pt'))
+    model.load_state_dict(torch.load('fine_tune_model_first_24.pt'))
     model.eval()
 
     lossFunction = nn.BCEWithLogitsLoss()
     sigmoid = nn.Sigmoid()
 
 
-    csvFile = open('no_pretrain_results.csv', 'w', newline='')
+    csvFile = open('no_pretrain_results_24.csv', 'w', newline='')
     csvWriter = csv.writer(csvFile)
     csvWriter.writerow(['hadm_id', 'Label', 'Prediction'])
 

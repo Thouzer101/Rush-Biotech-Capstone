@@ -38,9 +38,10 @@ def main():
             hadmIds.append(line.strip())
             line = txtFile.readline()
 
+    dataDir = '../mimiciv/2.0/'
     #icd codes
     icdCodes = {}
-    with open('../mimiciv/2.0/hosp/d_icd_diagnoses.csv', 'r') as csvFile:
+    with open(os.path.join(dataDir, 'hosp', 'd_icd_diagnoses.csv'), 'r') as csvFile:
         csvReader = csv.reader(csvFile)
         row = next(csvReader)
         for row in csvReader:
@@ -61,7 +62,7 @@ def main():
 
     #get event paramType
     chartEventTypes = {}
-    with open('../mimiciv/2.0/icu/d_items.csv', 'r') as csvFile:
+    with open(os.path.join(dataDir, 'icu', 'd_items.csv'), 'r') as csvFile:
         csvReader = csv.reader(csvFile)
         header = next(csvReader)
         for row in csvReader:
@@ -186,6 +187,7 @@ def main():
             startTime = timeStampToSecs(edAdmTime) 
 
         #if died within 30 day
+        relDeathTime = 0
         if len(deathTime) != 0:
             deathTime = timeStampToSecs(deathTime)
             relDeathTime = deathTime - startTime
@@ -195,6 +197,10 @@ def main():
                 died = 'False'
         else:
             died = 'False'
+
+        relDeathTime = secToHr(relDeathTime)
+        relDeathTime = max(relDeathTime, 0)
+        relDeathTime = int(np.round(relDeathTime))
 
         #get demographics
         maritalStatus = row[10]
@@ -308,7 +314,7 @@ def main():
         #TODO emar??
         #TODO poe??
 
-        entry = {'died': died, 'diagnoses':diagnoses, 'demographics':demographics, 'events':events}
+        entry = {'died': died, 'deathTime':relDeathTime, 'diagnoses':diagnoses, 'demographics':demographics, 'events':events}
 
         entryStr = json.dumps(entry)
 

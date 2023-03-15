@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 
+import csv
 from tqdm import tqdm
 
 from model import MimicModel, createMask
@@ -63,10 +64,12 @@ def main():
                     steps_per_epoch=stepsPerEpoch, pct_start=pctStart, epochs=nEpochs, last_epoch=lastEpoch, anneal_strategy='cos')
     #'''
 
+    '''
+    #model.load_state_dict(torch.load('model.pt'))
+    #optimizer.load_state_dict(torch.load('optimizer.pt'))
+    #lrScheduler.load_state_dict(torch.load('lrScheduler.pt'))
+    #'''
 
-    model.load_state_dict(torch.load('model.pt'))
-    optimizer.load_state_dict(torch.load('optimizer.pt'))
-    lrScheduler.load_state_dict(torch.load('lrScheduler.pt'))
 
     tokLossFunction = nn.CrossEntropyLoss(ignore_index=padIdx)
     timesLossFunction = nn.CrossEntropyLoss()
@@ -192,7 +195,7 @@ def main():
         csvWriter = csv.writer(csvFile)
         csvWriter.writerow(['trainLoss', 'validLoss'])
         for i, j in zip(trainLosses, validLosses):
-            csvwriter.writerow([i, j])
+            csvWriter.writerow([i, j])
 
 
 

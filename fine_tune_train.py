@@ -11,8 +11,8 @@ from dataset import MimicDataset, collate_fn
 def main():
 
     batchSize = 16
-    trainset = MimicDataset('subtrain.txt')
-    validset = MimicDataset('subvalid.txt')
+    trainset = MimicDataset('subtrain.txt', timeLimit=24)
+    validset = MimicDataset('subvalid.txt', timeLimit=24)
 
     trainloader = DataLoader(trainset, batch_size=batchSize, shuffle=True, collate_fn=collate_fn)
     validloader = DataLoader(validset, batch_size=batchSize, shuffle=False, collate_fn=collate_fn)
@@ -36,7 +36,7 @@ def main():
 
     model = model.to(device)
 
-    nEpochs = 100
+    nEpochs = 50
     #basic LR scheduler
     #NOTE, lrscheduler is in epoch loop, NOT training loop
     '''
@@ -155,12 +155,12 @@ def main():
         if validLoss < bestLoss:
             print('Saving State')
             bestLoss = validLoss
-            torch.save(model.state_dict(), 'fine_tune_model.pt')
+            torch.save(model.state_dict(), 'fine_tune_model_first_24.pt')
 
         #for reduceLROnPlateau
         #lrScheduler.step(validLoss)
 
-    with open('fine_tune_losses.txt', 'w', newline='') as csvFile:
+    with open('fine_tune_losses_first_24.txt', 'w', newline='') as csvFile:
         csvWriter = csv.writer(csvFile)
         csvWriter.writerow(['trainLoss', 'validLoss'])
         for i, j in zip(trainLosses, validLosses):
